@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Einfacher Text-Editor</title>
+  <style>
+    :root{font-family:system-ui,-apple-system,Segoe UI,Roboto,'Helvetica Neue',Arial}
+    body{margin:0;background:#f6f8fa;color:#0b1220;display:flex;flex-direction:column;height:100vh}
+    header{background:linear-gradient(90deg,#4f46e5,#06b6d4);color:white;padding:12px 16px;display:flex;gap:12px;align-items:center}
+    .brand{font-weight:700;font-size:1.05rem}
+    .toolbar{display:flex;gap:6px;align-items:center;margin-left:auto}
+    button{background:rgba(255,255,255,0.12);border:0;padding:8px 10px;border-radius:8px;color:white;cursor:pointer}
+    button:hover{background:rgba(255,255,255,0.18)}
+    main{flex:1;display:flex;flex-direction:column;padding:18px}
+    #editor{flex:1;border-radius:10px;padding:20px;background:white;box-shadow:0 4px 18px rgba(12,18,26,0.06);overflow:auto;min-height:220px}
+    #controls{display:flex;gap:10px;margin-top:12px;align-items:center}
+    .small{font-size:0.9rem;color:#394155}
+    input[type=file]{display:none}
+    footer{padding:10px 18px;font-size:0.85rem;color:#475569;background:#fff;border-top:1px solid #eef2ff}
+    .ghost{background:transparent;border:1px solid rgba(12,18,26,0.06);padding:6px 8px;border-radius:8px;cursor:pointer}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">Einfacher HTML-Editor</div>
+    <div class="toolbar" role="toolbar" aria-label="Formatierungswerkzeuge">
+      <button onclick="format('bold')" title="Fett (Strg/Cmd+B)">B</button>
+      <button onclick="format('italic')" title="Kursiv (Strg/Cmd+I)">I</button>
+      <button onclick="format('underline')" title="Unterstreichen">U</button>
+      <button onclick="format('insertUnorderedList')" title="Aufzählung">• List</button>
+      <button onclick="format('formatBlock','h1')" title="Überschrift 1">H1</button>
+      <button onclick="format('formatBlock','h2')" title="Überschrift 2">H2</button>
+      <button onclick="format('removeFormat')" title="Formatierung entfernen">Clear</button>
+    </div>
+  </header>
+
+  <main>
+    <div id="editor" contenteditable="true" spellcheck="true" aria-label="Textbereich">Schreibe hier deinen Text...</div>
+
+    <div id="controls">
+      <button class="ghost" onclick="downloadHTML()">Als HTML herunterladen</button>
+      <button class="ghost" onclick="downloadText()">Als .txt herunterladen</button>
+      <label class="ghost" title="Lade eine HTML- oder TXT-Datei hoch">
+        <input id="filein" type="file" accept=".html,.htm,.txt" onchange="loadFile(event)">
+        Datei öffnen
+      </label>
+      <div class="small" id="charcount">Zeichen: 0</div>
+    </div>
+  </main>
+
+  <footer>
+    Automatisches Speichern im Browser (LocalStorage). Schließe das Fenster, dein Text bleibt erhalten. — Rechtsklick → Einfügen, um schnell Text zu ergänzen.
+  </footer>
+
+  <script>
+    const editor = document.getElementById('editor');
+    const charcount = document.getElementById('charcount');
+    const STORAGE_KEY = 'einfacher-html-editor-v1';
+
+    // Lade gespeicherten Inhalt beim Start
+    window.addEventListener('DOMContentLoaded', ()=>{
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if(saved) editor.innerHTML = saved;
+      updateCount();
+    });
+
+    // Speichere jede 1 Sekunde wenn sich änderungen ergeben
+    let saveTimeout;
+    editor.addEventListener('input', ()=>{
+      updateCount();
+      clearTimeout(saveTimeout);
+      saveTimeout = setTimeout(()=> localStorage.setItem(STORAGE_KEY, editor.innerHTML), 1000);
+    });
+
+    function updateCount(){
+      const text = editor.innerText || '';
+      charcount.textContent = 'Zeichen: ' + text.length;
+    }
+
+    // Formatierungs-Befehle (einfache WYSIWYG)
+    function format(cmd, value=null){
+      document.execCommand(cmd, false, value);
+      editor.focus();
+      updateCount();
+    }
+
+    // Download als HTML
+    function downloadHTML(){
+      const blob = new Blob([fullHTML(editor.innerHTML)], {type:'text/html'});
+      const url = URL.createObjectURL(blob);
+      triggerDownload(url, 'mein-text.html');
+    }
+
+    // Download als TXT
+    function downloadText(){
+      const text = editor.innerText;
+      const blob = new Blob([text], {type:'text/plain'});
+      const url = URL.createObjectURL(blob);
+      triggerDownload(url, 'mein-text.txt');
+    }
+
+    function triggerDownload(url, filename){
+      const a = document.createElement('a');
+      a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    function fullHTML(inner){
+      return `<!doctype html>\n<html lang=\"de\">\n<head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Export</title></head>\n<body>\n${inner}\n</body>\n</html>`;
+    }
+
+    // Datei laden
+    function loadFile(e){
+      const f = e.target.files[0];
+      if(!f) return;
+      const reader = new FileReader();
+      reader.onload = ()=>{
+        // Wenn HTML -> zeige Body innerHTML, sonst plain text
+        const text = reader.result;
+        if(f.name.match(/\.html?$|\.htm$/i)){
+          const doc = new DOMParser().parseFromString(text,'text/html');
+          editor.innerHTML = doc.body.innerHTML || text;
+        } else {
+          editor.innerText = text;
+        }
+        localStorage.setItem(STORAGE_KEY, editor.innerHTML);
+        updateCount();
+      };
+      reader.readAsText(f);
+      e.target.value = '';
+    }
+
+    // Tastenkürzel: Strg/Cmd+S -> Download HTML
+    window.addEventListener('keydown', (ev)=>{
+      if((ev.ctrlKey||ev.metaKey) && ev.key.toLowerCase()==='s'){
+        ev.preventDefault(); downloadHTML();
+      }
+    });
+  </script>
+</body>
+</html>
